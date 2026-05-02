@@ -6,6 +6,7 @@ import { useTranslation } from 'next-i18next'
 
 import axios from 'axios'
 import toast from 'react-hot-toast'
+import type PlyrType from 'plyr'
 import Plyr from 'plyr-react'
 import { useAsync } from 'react-async-hook'
 import { useClipboard } from 'use-clipboard-copy'
@@ -20,7 +21,7 @@ import FourOhFour from '../FourOhFour'
 import Loading from '../Loading'
 import CustomEmbedLinkMenu from '../CustomEmbedLinkMenu'
 
-import 'plyr-react/dist/plyr.css'
+import 'plyr-react/plyr.css'
 
 const VideoPlayer: FC<{
   videoName: string
@@ -63,14 +64,14 @@ const VideoPlayer: FC<{
     poster: thumbnail,
     tracks: [{ kind: 'captions', label: videoName, src: '', default: true }],
   }
-  const plyrOptions: Plyr.Options = {
+  const plyrOptions: PlyrType.Options = {
     ratio: `${width ?? 16}:${height ?? 9}`,
   }
   if (!isFlv) {
     // If the video is not in flv format, we can use the native plyr and add sources directly with the video URL
     plyrSource['sources'] = [{ src: videoUrl }]
   }
-  return <Plyr id="plyr" source={plyrSource as Plyr.SourceInfo} options={plyrOptions} />
+  return <Plyr id="plyr" source={plyrSource as PlyrType.SourceInfo} options={plyrOptions} />
 }
 
 const VideoPreview: FC<{ file: OdFileObject }> = ({ file }) => {

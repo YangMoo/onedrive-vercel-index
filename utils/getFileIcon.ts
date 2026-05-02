@@ -101,7 +101,7 @@ const extensions = {
  * @param key The index key
  * @returns Whether or not the key exists inside the object
  */
-export function hasKey<O>(obj: O, key: PropertyKey): key is keyof O {
+export function hasKey<O extends object>(obj: O, key: PropertyKey): key is keyof O {
   return key in obj
 }
 

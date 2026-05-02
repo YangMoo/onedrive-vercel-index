@@ -1,4 +1,5 @@
 import { posix as pathPosix } from 'path'
+import type { OutgoingHttpHeaders } from 'http'
 
 import type { NextApiRequest, NextApiResponse } from 'next'
 import axios from 'axios'
@@ -72,12 +73,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if ('@microsoft.graph.downloadUrl' in data) {
       // Only proxy raw file content response for files up to 4MB
       if (proxy && 'size' in data && data['size'] < 4194304) {
-        const { headers, data: stream } = await axios.get(data['@microsoft.graph.downloadUrl'] as string, {
+        const { headers: axHeaders, data: stream } = await axios.get(data['@microsoft.graph.downloadUrl'] as string, {
           responseType: 'stream',
         })
-        headers['Cache-Control'] = cacheControlHeader
+        const outHeaders: OutgoingHttpHeaders = {
+          ...(typeof axHeaders.toJSON === 'function' ? axHeaders.toJSON() : {}),
+          'Cache-Control': cacheControlHeader,
+        }
         // Send data stream as response
-        res.writeHead(200, headers)
+        res.writeHead(200, outHeaders)
         stream.pipe(res)
       } else {
         res.redirect(data['@microsoft.graph.downloadUrl'])
