@@ -69,7 +69,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       res.status(400).json({ error: "The item doesn't have a valid thumbnail." })
     }
   } catch (error: any) {
-    res.status(error?.response?.status).json({ error: error?.response?.data ?? 'Internal server error.' })
+    const status = error?.response?.status ?? 500
+    const retryAfter = error?.response?.headers?.['retry-after']
+    if (retryAfter) {
+      res.setHeader('Retry-After', String(retryAfter))
+    }
+    res.status(status).json({ error: error?.response?.data ?? 'Internal server error.' })
   }
   return
 }
