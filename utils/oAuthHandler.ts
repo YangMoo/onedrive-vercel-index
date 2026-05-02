@@ -2,6 +2,7 @@ import axios from 'axios'
 import CryptoJS from 'crypto-js'
 
 import apiConfig from '../config/api.config'
+import { graphGet } from './graphRequest'
 
 // Just a disguise to obfuscate required tokens (including but not limited to client secret,
 // access tokens, and refresh tokens), used along with the following two functions
@@ -87,7 +88,7 @@ export async function requestTokenWithAuthCode(
 // in the Microsoft Graph API. If the userPrincipalName matches, proceed with token storing.
 export async function getAuthPersonInfo(accessToken: string) {
   const profileApi = apiConfig.driveApi.replace('/drive', '')
-  return axios.get(profileApi, {
+  return graphGet<{ userPrincipalName: string }>(profileApi, {
     headers: {
       Authorization: `Bearer ${accessToken}`,
     },

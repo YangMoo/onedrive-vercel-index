@@ -10,6 +10,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "test": "vitest run",
     "format": "prettier 'components/**/*.tsx' 'config/*.js' 'pages/**/*.{ts,tsx}' '{types,utils}/**/*.ts' --write",
     "extract": "i18next"
   },
@@ -76,6 +77,7 @@
     "prettier": "^3.4.2",
     "prettier-plugin-tailwindcss": "^0.6.9",
     "tailwindcss": "^3.4.15",
-    "typescript": "^5.7.2"
+    "typescript": "^5.7.2",
+    "vitest": "^3.2.4"
   }
 }

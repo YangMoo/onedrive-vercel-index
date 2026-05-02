@@ -4,6 +4,7 @@ import type { NextApiRequest, NextApiResponse } from 'next'
 import axios from 'axios'
 
 import apiConfig from '../../config/api.config'
+import { graphGet } from '../../utils/graphRequest'
 import siteConfig from '../../config/site.config'
 import { revealObfuscatedToken } from '../../utils/oAuthHandler'
 import { compareHashedToken } from '../../utils/protectedRouteHandler'
@@ -120,12 +121,15 @@ export async function checkAuthRoute(
   }
 
   try {
-    const token = await axios.get(`${apiConfig.driveApi}/root${encodePath(authTokenPath)}`, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-      params: {
-        select: '@microsoft.graph.downloadUrl,file',
-      },
-    })
+    const token = await graphGet<{ '@microsoft.graph.downloadUrl': string }>(
+      `${apiConfig.driveApi}/root${encodePath(authTokenPath)}`,
+      {
+        headers: { Authorization: `Bearer ${accessToken}` },
+        params: {
+          select: '@microsoft.graph.downloadUrl,file',
+        },
+      }
+    )
 
     // Handle request and check for header 'od-protected-token'
     const odProtectedToken = await axios.get(token.data['@microsoft.graph.downloadUrl'])
@@ -220,25 +224,36 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     await runCorsMiddleware(req, res)
     res.setHeader('Cache-Control', 'no-cache')
 
-    const { data } = await axios.get(requestUrl, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-      params: {
-        // OneDrive international version fails when only selecting the downloadUrl (what a stupid bug)
-        select: 'id,@microsoft.graph.downloadUrl',
-      },
-    })
+    try {
+      const { data } = await graphGet<{ '@microsoft.graph.downloadUrl'?: string }>(requestUrl, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+        params: {
+          // OneDrive international version fails when only selecting the downloadUrl (what a stupid bug)
+          select: 'id,@microsoft.graph.downloadUrl',
+        },
+      })
 
-    if ('@microsoft.graph.downloadUrl' in data) {
-      res.redirect(data['@microsoft.graph.downloadUrl'])
-    } else {
-      res.status(404).json({ error: 'No download url found.' })
+      if ('@microsoft.graph.downloadUrl' in data && data['@microsoft.graph.downloadUrl']) {
+        res.redirect(data['@microsoft.graph.downloadUrl'])
+      } else {
+        res.status(404).json({ error: 'No download url found.' })
+      }
+    } catch (error: any) {
+      const status = error?.response?.status ?? 500
+      const retryAfter = error?.response?.headers?.['retry-after']
+      if (retryAfter) {
+        res.setHeader('Retry-After', String(retryAfter))
+      }
+      res.status(status).json({ error: error?.response?.data ?? 'Internal server error.' })
     }
     return
   }
 
   // Querying current path identity (file or folder) and follow up query childrens in folder
   try {
-    const { data: identityData } = await axios.get(requestUrl, {
+    type DriveItem = Record<string, unknown>
+
+    const { data: identityData } = await graphGet<DriveItem>(requestUrl, {
       headers: { Authorization: `Bearer ${accessToken}` },
       params: {
         select: 'name,size,id,lastModifiedDateTime,folder,file,video,image',
@@ -246,24 +261,26 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     })
 
     if ('folder' in identityData) {
-      const { data: folderData } = await axios.get(`${requestUrl}${isRoot ? '' : ':'}/children`, {
-        headers: { Authorization: `Bearer ${accessToken}` },
-        params: next
-          ? {
-              select: 'name,size,id,lastModifiedDateTime,folder,file,video,image',
-              top: siteConfig.maxItems,
-              $skipToken: next,
-            }
-          : {
-              select: 'name,size,id,lastModifiedDateTime,folder,file,video,image',
-              top: siteConfig.maxItems,
-            },
-      })
+      const { data: folderData } = await graphGet<DriveItem & { value?: unknown[]; '@odata.nextLink'?: string }>(
+        `${requestUrl}${isRoot ? '' : ':'}/children`,
+        {
+          headers: { Authorization: `Bearer ${accessToken}` },
+          params: next
+            ? {
+                select: 'name,size,id,lastModifiedDateTime,folder,file,video,image',
+                top: siteConfig.maxItems,
+                $skipToken: next,
+              }
+            : {
+                select: 'name,size,id,lastModifiedDateTime,folder,file,video,image',
+                top: siteConfig.maxItems,
+              },
+        }
+      )
 
       // Extract next page token from full @odata.nextLink
-      const nextPage = folderData['@odata.nextLink']
-        ? folderData['@odata.nextLink'].match(/&\$skiptoken=(.+)/i)[1]
-        : null
+      const nextLink = folderData['@odata.nextLink']
+      const nextPage = nextLink ? nextLink.match(/&\$skiptoken=(.+)/i)?.[1] ?? null : null
 
       // Return paging token if specified
       if (nextPage) {

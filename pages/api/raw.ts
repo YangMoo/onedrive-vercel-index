@@ -6,6 +6,7 @@ import axios from 'axios'
 import Cors from 'cors'
 
 import { driveApi, cacheControlHeader } from '../../config/api.config'
+import { graphGet } from '../../utils/graphRequest'
 import { encodePath, getAccessToken, checkAuthRoute } from '.'
 
 // CORS middleware for raw links: https://nextjs.org/docs/api-routes/api-middlewares
@@ -62,7 +63,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     // Handle response from OneDrive API
     const requestUrl = `${driveApi}/root${encodePath(cleanPath)}`
-    const { data } = await axios.get(requestUrl, {
+    type RawMetadata = { id?: string; size?: number; '@microsoft.graph.downloadUrl'?: string }
+
+    const { data } = await graphGet<RawMetadata>(requestUrl, {
       headers: { Authorization: `Bearer ${accessToken}` },
       params: {
         // OneDrive international version fails when only selecting the downloadUrl (what a stupid bug)
@@ -70,9 +73,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       },
     })
 
-    if ('@microsoft.graph.downloadUrl' in data) {
+    if ('@microsoft.graph.downloadUrl' in data && data['@microsoft.graph.downloadUrl']) {
       // Only proxy raw file content response for files up to 4MB
-      if (proxy && 'size' in data && data['size'] < 4194304) {
+      if (proxy && typeof data.size === 'number' && data.size < 4194304) {
         const { headers: axHeaders, data: stream } = await axios.get(data['@microsoft.graph.downloadUrl'] as string, {
           responseType: 'stream',
         })
@@ -91,7 +94,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
     return
   } catch (error: any) {
-    res.status(error?.response?.status ?? 500).json({ error: error?.response?.data ?? 'Internal server error.' })
+    const status = error?.response?.status ?? 500
+    const retryAfter = error?.response?.headers?.['retry-after']
+    if (retryAfter) {
+      res.setHeader('Retry-After', String(retryAfter))
+    }
+    res.status(status).json({ error: error?.response?.data ?? 'Internal server error.' })
     return
   }
 }

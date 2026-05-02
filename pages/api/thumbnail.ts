@@ -2,10 +2,10 @@ import type { OdThumbnail } from '../../types'
 
 import { posix as pathPosix } from 'path'
 
-import axios from 'axios'
 import type { NextApiRequest, NextApiResponse } from 'next'
 
 import { checkAuthRoute, encodePath, getAccessToken } from '.'
+import { graphGet } from '../../utils/graphRequest'
 import apiConfig from '../../config/api.config'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -58,7 +58,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const isRoot = requestPath === ''
 
   try {
-    const { data } = await axios.get(`${requestUrl}${isRoot ? '' : ':'}/thumbnails`, {
+    const { data } = await graphGet<{ value: OdThumbnail[] }>(`${requestUrl}${isRoot ? '' : ':'}/thumbnails`, {
       headers: { Authorization: `Bearer ${accessToken}` },
     })
 

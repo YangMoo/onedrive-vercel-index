@@ -1,7 +1,7 @@
-import axios from 'axios'
 import type { NextApiRequest, NextApiResponse } from 'next'
 
 import { encodePath, getAccessToken } from '.'
+import { graphGet } from '../../utils/graphRequest'
 import apiConfig from '../../config/api.config'
 import siteConfig from '../../config/site.config'
 
@@ -44,7 +44,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const searchApi = `${apiConfig.driveApi}/root${encodedPath}/search(q='${sanitiseQuery(searchQuery)}')`
 
     try {
-      const { data } = await axios.get(searchApi, {
+      const { data } = await graphGet<{ value: unknown[] }>(searchApi, {
         headers: { Authorization: `Bearer ${accessToken}` },
         params: {
           select: 'id,name,file,folder,parentReference',
@@ -53,7 +53,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       })
       res.status(200).json(data.value)
     } catch (error: any) {
-      res.status(error?.response?.status ?? 500).json({ error: error?.response?.data ?? 'Internal server error.' })
+      const status = error?.response?.status ?? 500
+      const retryAfter = error?.response?.headers?.['retry-after']
+      if (retryAfter) {
+        res.setHeader('Retry-After', String(retryAfter))
+      }
+      res.status(status).json({ error: error?.response?.data ?? 'Internal server error.' })
     }
   } else {
     res.status(200).json([])

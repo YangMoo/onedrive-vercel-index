@@ -1,7 +1,7 @@
-import axios from 'axios'
 import type { NextApiRequest, NextApiResponse } from 'next'
 
 import { getAccessToken } from '.'
+import { graphGet } from '../../utils/graphRequest'
 import apiConfig from '../../config/api.config'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -19,7 +19,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const itemApi = `${apiConfig.driveApi}/items/${id}`
 
     try {
-      const { data } = await axios.get(itemApi, {
+      const { data } = await graphGet(itemApi, {
         headers: { Authorization: `Bearer ${accessToken}` },
         params: {
           select: 'id,name,parentReference',
@@ -27,7 +27,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       })
       res.status(200).json(data)
     } catch (error: any) {
-      res.status(error?.response?.status ?? 500).json({ error: error?.response?.data ?? 'Internal server error.' })
+      const status = error?.response?.status ?? 500
+      const retryAfter = error?.response?.headers?.['retry-after']
+      if (retryAfter) {
+        res.setHeader('Retry-After', String(retryAfter))
+      }
+      res.status(status).json({ error: error?.response?.data ?? 'Internal server error.' })
     }
   } else {
     res.status(400).json({ error: 'Invalid driveItem ID.' })
