@@ -8,12 +8,13 @@ export interface GraphRetryOptions {
   maxBackoffMs?: number
 }
 
+/** Defaults sized for Vercel serverless (~10s wall clock on Hobby): leave room for token + Graph RTT. */
 const defaults = {
-  maxAttempts: 5,
-  maxWaitPerAttemptMs: 8000,
-  maxTotalWaitMs: 20000,
-  initialBackoffMs: 1000,
-  maxBackoffMs: 32000,
+  maxAttempts: 4,
+  maxWaitPerAttemptMs: 2000,
+  maxTotalWaitMs: 5000,
+  initialBackoffMs: 750,
+  maxBackoffMs: 8000,
 } as const
 
 function sleep(ms: number): Promise<void> {
