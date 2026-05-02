@@ -2,7 +2,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { AxiosError } from 'axios'
 import type { InternalAxiosRequestConfig } from 'axios'
 
-import { parseRetryAfterMs, withGraphRetry } from './graphRequest'
+import { parseRetryAfterMs } from './retryAfter'
+import { withGraphRetry } from './graphRequest'
 
 function ax429(retryAfter?: string): AxiosError {
   const config = {} as InternalAxiosRequestConfig

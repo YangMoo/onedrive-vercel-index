@@ -1,4 +1,3 @@
-import axios from 'axios'
 import useSWR, { SWRResponse } from 'swr'
 import { Dispatch, Fragment, SetStateAction, useState } from 'react'
 import AwesomeDebouncePromise from 'awesome-debounce-promise'
@@ -14,6 +13,7 @@ import type { OdDriveItem, OdSearchResult } from '../types'
 import { LoadingIcon } from './Loading'
 
 import { getFileIcon } from '../utils/getFileIcon'
+import { axiosGetRespecting429 } from '../utils/axiosClient429Retry'
 import { fetcher } from '../utils/fetchWithSWR'
 import siteConfig from '../config/site.config'
 
@@ -47,7 +47,7 @@ function mapAbsolutePath(path: string): string {
 function useDriveItemSearch() {
   const [query, setQuery] = useState('')
   const searchDriveItem = async (q: string) => {
-    const { data } = await axios.get<OdSearchResult>(`/api/search/?q=${q}`)
+    const { data } = await axiosGetRespecting429<OdSearchResult>(`/api/search/?q=${q}`)
 
     // Map parentReference to the absolute path of the search result
     data.map(item => {

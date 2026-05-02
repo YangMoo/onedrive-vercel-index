@@ -1,5 +1,7 @@
 import axios, { type AxiosRequestConfig, type AxiosResponse, isAxiosError } from 'axios'
 
+import { parseRetryAfterMs } from './retryAfter'
+
 export interface GraphRetryOptions {
   maxAttempts?: number
   maxWaitPerAttemptMs?: number
@@ -8,14 +10,33 @@ export interface GraphRetryOptions {
   maxBackoffMs?: number
 }
 
-/** Defaults sized for Vercel serverless (~10s wall clock on Hobby): leave room for token + Graph RTT. */
-const defaults = {
-  maxAttempts: 4,
-  maxWaitPerAttemptMs: 2000,
-  maxTotalWaitMs: 5000,
-  initialBackoffMs: 750,
-  maxBackoffMs: 8000,
-} as const
+/** Re-export for callers/tests that imported from graphRequest before. */
+export { parseRetryAfterMs } from './retryAfter'
+
+function readIntEnv(name: string, fallback: number, min: number, max: number): number {
+  if (typeof process === 'undefined' || !process.env) return fallback
+  const raw = process.env[name]
+  if (raw === undefined || raw === '') return fallback
+  const n = parseInt(raw, 10)
+  if (!Number.isFinite(n)) return fallback
+  return Math.min(max, Math.max(min, n))
+}
+
+function resolveDefaults(): {
+  maxAttempts: number
+  maxWaitPerAttemptMs: number
+  maxTotalWaitMs: number
+  initialBackoffMs: number
+  maxBackoffMs: number
+} {
+  return {
+    maxAttempts: readIntEnv('GRAPH_RETRY_MAX_ATTEMPTS', 4, 1, 15),
+    maxWaitPerAttemptMs: readIntEnv('GRAPH_RETRY_MAX_WAIT_MS', 2000, 500, 120_000),
+    maxTotalWaitMs: readIntEnv('GRAPH_RETRY_MAX_TOTAL_MS', 5000, 0, 120_000),
+    initialBackoffMs: readIntEnv('GRAPH_RETRY_INITIAL_BACKOFF_MS', 750, 100, 60_000),
+    maxBackoffMs: readIntEnv('GRAPH_RETRY_MAX_BACKOFF_MS', 8000, 500, 120_000),
+  }
+}
 
 function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms))
@@ -30,32 +51,16 @@ function headerRetryAfter(headers: Record<string, unknown> | undefined): string 
 }
 
 /**
- * Parse Microsoft Graph / HTTP Retry-After: delay-seconds or HTTP-date.
- * @see https://learn.microsoft.com/graph/throttling
- */
-export function parseRetryAfterMs(retryAfter: string | undefined): number | null {
-  if (retryAfter === undefined) return null
-  const trimmed = retryAfter.trim()
-  if (!trimmed) return null
-  if (/^\d+$/.test(trimmed)) {
-    return Math.max(0, parseInt(trimmed, 10)) * 1000
-  }
-  const dateMs = Date.parse(trimmed)
-  if (!Number.isNaN(dateMs)) {
-    return Math.max(0, dateMs - Date.now())
-  }
-  return null
-}
-
-/**
  * Run an axios-based Microsoft Graph call with 429 handling: honor Retry-After, else exponential backoff.
+ * Tune with GRAPH_RETRY_* env vars (see resolveDefaults).
  */
 export async function withGraphRetry<T>(fn: () => Promise<T>, options: GraphRetryOptions = {}): Promise<T> {
-  const maxAttempts = options.maxAttempts ?? defaults.maxAttempts
-  const maxWaitPerAttemptMs = options.maxWaitPerAttemptMs ?? defaults.maxWaitPerAttemptMs
-  const maxTotalWaitMs = options.maxTotalWaitMs ?? defaults.maxTotalWaitMs
-  const initialBackoffMs = options.initialBackoffMs ?? defaults.initialBackoffMs
-  const maxBackoffMs = options.maxBackoffMs ?? defaults.maxBackoffMs
+  const d = resolveDefaults()
+  const maxAttempts = options.maxAttempts ?? d.maxAttempts
+  const maxWaitPerAttemptMs = options.maxWaitPerAttemptMs ?? d.maxWaitPerAttemptMs
+  const maxTotalWaitMs = options.maxTotalWaitMs ?? d.maxTotalWaitMs
+  const initialBackoffMs = options.initialBackoffMs ?? d.initialBackoffMs
+  const maxBackoffMs = options.maxBackoffMs ?? d.maxBackoffMs
 
   let totalWaited = 0
   let backoffMs = initialBackoffMs

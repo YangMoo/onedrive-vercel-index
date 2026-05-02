@@ -1,22 +1,34 @@
-import axios from 'axios'
 import useSWRInfinite from 'swr/infinite'
 
 import type { OdAPIResponse } from '../types'
 
+import { axiosGetRespecting429 } from './axiosClient429Retry'
 import { getStoredToken } from './protectedRouteHandler'
 
+function normaliseFetcherArgs(args: unknown[]): { url: string; token?: string } {
+  const first = args[0]
+  if (Array.isArray(first) && typeof first[0] === 'string') {
+    const t = first[1]
+    return { url: first[0], token: typeof t === 'string' && t.length > 0 ? t : undefined }
+  }
+  if (typeof first === 'string') {
+    const t = args[1]
+    return { url: first, token: typeof t === 'string' && t.length > 0 ? t : undefined }
+  }
+  throw new Error('fetcher: invalid key from useSWRInfinite')
+}
+
 // Common axios fetch function for use with useSWR
-export async function fetcher(url: string, token?: string): Promise<any> {
+export async function fetcher(...args: unknown[]): Promise<any> {
+  const { url, token } = normaliseFetcherArgs(args)
   try {
-    return (
-      await (token
-        ? axios.get(url, {
-            headers: { 'od-protected-token': token },
-          })
-        : axios.get(url))
-    ).data
+    const res = await axiosGetRespecting429(
+      url,
+      token ? { headers: { 'od-protected-token': token } } : undefined
+    )
+    return res.data
   } catch (err: any) {
-    throw { status: err.response.status, message: err.response.data }
+    throw { status: err.response?.status, message: err.response?.data }
   }
 }
 

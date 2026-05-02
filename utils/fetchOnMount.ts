@@ -1,5 +1,6 @@
-import axios from 'axios'
 import { useEffect, useState } from 'react'
+
+import { axiosGetRespecting429 } from './axiosClient429Retry'
 import { getStoredToken } from './protectedRouteHandler'
 
 /**
@@ -19,11 +20,12 @@ export default function useFileContent(
     const hashedToken = getStoredToken(path)
     const url = fetchUrl + (hashedToken ? `&odpt=${hashedToken}` : '')
 
-    axios
+    axiosGetRespecting429(url, {
       // Using 'blob' as response type to get the response as a raw file blob, which is later parsed as a string.
       // Axios defaults response parsing to JSON, which causes issues when parsing JSON files.
-      .get(url, { responseType: 'blob' })
-      .then(async res => setResponse(await res.data.text()))
+      responseType: 'blob',
+    })
+      .then(async res => setResponse(await (res.data as Blob).text()))
       .catch(e => setError(e.message))
       .finally(() => setValidating(false))
   }, [fetchUrl, path])
